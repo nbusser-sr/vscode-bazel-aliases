@@ -1,0 +1,117 @@
+{
+  "name": "bazel-aliases",
+  "displayName": "Bazel Aliases",
+  "description": "Give names to Bazel targets, allowing VS Code variables to refer to their output, environment, and working directory.",
+  "publisher": "gregoire",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/71/bazel-aliases"
+  },
+  "version": "0.0.1",
+  "license": "MPL-2.0",
+
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "packageManager": "pnpm@10.33.2",
+
+  "extensionDependencies": ["BazelBuild.vscode-bazel"],
+
+  "extensionKindComment": [
+    "Needed to write files in the workspace with --run_under."
+  ],
+  "extensionKind": ["workspace"],
+
+  "categories": ["Other"],
+  "api": "none",
+  "main": "./dist/extension.js",
+  "browser": "./dist/extension.js",
+
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Ignores workspace aliases."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Requires a Bazel workspace."
+    }
+  },
+
+  "contributes": {
+    "commands": [
+      {
+        "command": "bazel-aliases.update",
+        "title": "Set Active Target",
+        "category": "Bazel",
+        "enablement": "bazel.haveWorkspace"
+      },
+      {
+        "command": "bazel-aliases.build",
+        "title": "Build Active Target",
+        "category": "Bazel",
+        "enablement": "bazel.haveWorkspace && bazel-aliases.active"
+      },
+      {
+        "command": "bazel-aliases.copy",
+        "title": "Copy Active Target Label",
+        "category": "Bazel",
+        "enablement": "bazel.haveWorkspace && bazel-aliases.active"
+      }
+    ],
+    "configuration": {
+      "title": "Bazel Aliases",
+      "properties": {
+        "bazel-aliases.aliases": {
+          "type": "object",
+          "title": "Aliases",
+          "markdownDescription": "A map from alias to Bazel target.\n\nNew commands will be defined for each alias:\n\n- `bazel-aliases.<alias>.build` builds the target;\n- `bazel-aliases.<alias>.output` builds the target and yields its absolute path;\n- `bazel-aliases.<alias>.outputPath` yields the target's absolute path without building it;\n- `bazel-aliases.<alias>.envFile` builds the target and yields the absolute path to a file which contains the execution environment;\n- `bazel-aliases.<alias>.workingDirectory` builds the target and yields the absolute path of the working directory it would run under with `bazel run`;\n- `bazel-aliases.<alias>.update` sets the target corresponding to that alias for the current user/workspace.\n\nThe given values are defaults (and may be set to `null`), and can be overridden by each user.",
+          "patternProperties": {
+            "^\\w+$": {
+              "type": ["string", "null"],
+              "pattern": "^(@|//)\\S+$"
+            }
+          },
+          "properties": {
+            "active": false
+          },
+          "additionalProperties": false,
+          "scope": "resource"
+        }
+      }
+    }
+  },
+
+  "activationEvents": [
+    "workspaceContains:MODULE.bazel"
+  ],
+
+  "scripts": {
+    "vscode:prepublish": "pnpm run prepackage",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.mjs",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.mjs --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "prepackage": "pnpm run check-types && pnpm run lint && node esbuild.mjs --production",
+    "package": "vsce package",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.110.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@vscode/vsce": "^3.9.1",
+    "typescript-eslint": "^8.59.1",
+    "eslint": "^10.3.0",
+    "esbuild": "^0.28.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}

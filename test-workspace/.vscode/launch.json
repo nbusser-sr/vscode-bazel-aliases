@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "name": "Launch",
+      "request": "launch",
+      // CodeLLDB will first evaluate `program`, so if we use `output` we won't get to batch all
+      // commands together. Instead, we use `outputPath` (which does not build the binary), so we
+      // get a chance for `envFile` and `workingDirectory` to evaluate as part of a single batch.
+      "program": "${command:bazel-aliases.active.outputPath}",
+      "envFile": "${command:bazel-aliases.active.envFile}",
+      "cwd": "${command:bazel-aliases.active.workingDirectory}"
+    }
+  ]
+}

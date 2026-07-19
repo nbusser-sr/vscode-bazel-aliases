@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "preserve",
+    "target": "ES2025",
+    "lib": [
+      "DOM",
+      "ES2020",
+      "ES2025",
+      "ESNext.TypedArrays"
+    ],
+    "rootDir": "src",
+    "strict": true,
+    "noEmit": true
+  }
+}

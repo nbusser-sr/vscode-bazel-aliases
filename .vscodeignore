@@ -1,0 +1,11 @@
+.gitignore
+.vscode-test.mjs
+.vscode-test/
+.vscode/
+**/*.map
+*.mjs
+node_modules/
+pnpm-*.yaml
+src/
+test-workspace/
+tsconfig.json
