@@ -30,6 +30,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    concurrency:
+      group: release
+      cancel-in-progress: false
+
     permissions:
       contents: write
 
@@ -65,3 +69,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.get-version.outputs.version }}
+
+      - name: Publish to Visual Studio Marketplace
+        if: steps.get-version.outputs.create-release == 'true'
+        run: pnpm exec vsce publish --packagePath *.vsix --skip-duplicate
+        env:
+          VSCE_PAT: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+
+      - name: Publish to Open VSX Registry
+        if: steps.get-version.outputs.create-release == 'true'
+        run: pnpm exec ovsx publish *.vsix --skip-duplicate
+        env:
+          OVSX_PAT: ${{ secrets.OPEN_VSX_TOKEN }}
