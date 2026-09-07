@@ -26,6 +26,19 @@ If you'd like to have more than one "alias", define `bazel-aliases.aliases` in
 Now the status bar item can be hovered to override these aliases, and new
 commands `bazel-aliases.{main,test}.{output,...}` will be available.
 
+### Environment file
+
+The extension will look for an `.env` file at the root of the workspace, and
+automatically feed its content to the underlying bazel commands.
+
+The `.env` file location can be changed in `settings.json` like so:
+
+```json
+{
+  "bazel-aliases.envFile": "/path/to/env/file"
+}
+```
+
 ## Commands
 
 For an alias `active` (the default alias), the following commands are defined:

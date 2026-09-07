@@ -77,6 +77,13 @@
           },
           "additionalProperties": false,
           "scope": "resource"
+        },
+        "bazel-aliases.envFile": {
+          "type": "string",
+          "title": "Base env file",
+          "markdownDescription": "A base env file that will be injected to bazel command.",
+          "default": ".env",
+          "scope": "resource"
         }
       }
     }
@@ -98,6 +105,7 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
+    "format": "deno fmt src/",
     "lint": "eslint src",
     "check": "npm-run-all -p check-types lint",
     "test": "vscode-test"

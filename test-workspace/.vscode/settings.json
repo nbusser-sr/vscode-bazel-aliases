@@ -2,5 +2,5 @@
   "bazel-aliases.aliases": {
     "main": "//:main",
     "test": "//:test"
-  }
+  },
 }
