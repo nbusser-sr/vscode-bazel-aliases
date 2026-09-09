@@ -177,10 +177,10 @@ export async function activate(
         for (const [, key, value] of script.matchAll(/^\s+(\w+)=(.+) \\$/gm)) {
           env[key] = value;
         }
-        // Add all the keys from `envFile`
+        // Add all the entries from `envFile`.
         Object.assign(env, await envFileKeyValues);
 
-        // Convert to plain text environment file
+        // Convert to plain text environment file.
         const envString = Object.entries(env).map(([key, value]) =>
           `${key}=${value}`
         ).join("\n");
@@ -384,13 +384,21 @@ export async function activate(
     return aliases;
   };
 
+  /** Returns the path to the environment file, defined in the extension settings. */
+  const configEnvFile = () => {
+    return vscode.workspace.getConfiguration(extensionId).get<
+      string
+    >("envFile")!;
+  }
+
   /**
    * Read an environment file and parses it to an object.
    * Ignores comment lines, starting with "#".
    * Only one environment variable can be declared for each line.
-   **/
+   */
   const readEnvFile = async (envFile: string) => {
     const path = vscode.Uri.joinPath(
+      // We assume that we a workspace folder because vscode-bazel extension also requires using a workspace folder.
       vscode.workspace.workspaceFolders![0].uri,
       envFile,
     );
@@ -442,10 +450,8 @@ export async function activate(
       unregisterCommands(alias);
     }
 
-    // Load env file and set up a watcher on it
-    const envFile = vscode.workspace.getConfiguration(extensionId).get<
-      string
-    >("envFile")!;
+    // Load env file and set up a watcher on it.
+    const envFile = configEnvFile();
     envFileWatcher?.dispose();
     envFileWatcher = vscode.workspace.createFileSystemWatcher(envFile);
     envFileWatcher.onDidCreate(() => loadEnvFile(envFile));
@@ -476,11 +482,9 @@ export async function activate(
     registerCommands(alias);
   }
 
-  // Load the env file once
+  // Load the env file once.
   loadEnvFile(
-    vscode.workspace.getConfiguration(extensionId).get<
-      string
-    >("envFile")!,
+    configEnvFile()
   );
 
   // -----------------------------------------------------------------------------------------------

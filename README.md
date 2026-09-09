@@ -29,7 +29,7 @@ commands `bazel-aliases.{main,test}.{output,...}` will be available.
 ### Environment file
 
 The extension will look for an `.env` file at the root of the workspace, and
-automatically feed its content to the underlying bazel commands.
+automatically include its entries in generated `.envFile` files.
 
 The `.env` file location can be changed in `settings.json` like so:
 
