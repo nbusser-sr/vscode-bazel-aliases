@@ -386,10 +386,11 @@ export async function activate(
 
   /** Returns the path to the environment file, defined in the extension settings. */
   const configEnvFile = () => {
-    return vscode.workspace.getConfiguration(extensionId).get<
-      string
-    >("envFile")!;
-  }
+    const envFile = vscode.workspace.getConfiguration(extensionId).get<
+      string | null
+    >("envFile");
+    return envFile !== undefined ? envFile : null;
+  };
 
   /**
    * Read an environment file and parses it to an object.
@@ -428,8 +429,12 @@ export async function activate(
     return envContent;
   };
 
-  const loadEnvFile = (envFile: string) => {
-    envFileKeyValues = readEnvFile(envFile);
+  const loadEnvFile = (envFile: string | null) => {
+    if (envFile !== null) {
+      envFileKeyValues = readEnvFile(envFile);
+    } else {
+      envFileKeyValues = Promise.resolve({});
+    }
   };
 
   let envFileWatcher: vscode.FileSystemWatcher | undefined;
@@ -453,13 +458,14 @@ export async function activate(
     // Load env file and set up a watcher on it.
     const envFile = configEnvFile();
     envFileWatcher?.dispose();
-    envFileWatcher = vscode.workspace.createFileSystemWatcher(envFile);
-    envFileWatcher.onDidCreate(() => loadEnvFile(envFile));
-    envFileWatcher.onDidChange(() => loadEnvFile(envFile));
-    envFileWatcher.onDidDelete(() => {
-      envFileKeyValues = Promise.resolve({});
-    });
-
+    if (envFile !== null) {
+      envFileWatcher = vscode.workspace.createFileSystemWatcher(envFile);
+      envFileWatcher.onDidCreate(() => loadEnvFile(envFile));
+      envFileWatcher.onDidChange(() => loadEnvFile(envFile));
+      envFileWatcher.onDidDelete(() => {
+        envFileKeyValues = Promise.resolve({});
+      });
+    }
     loadEnvFile(envFile);
   };
 
@@ -484,7 +490,7 @@ export async function activate(
 
   // Load the env file once.
   loadEnvFile(
-    configEnvFile()
+    configEnvFile(),
   );
 
   // -----------------------------------------------------------------------------------------------
