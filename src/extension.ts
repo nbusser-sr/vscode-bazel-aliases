@@ -13,6 +13,8 @@ export async function activate(
   // -------------------------------------------------------------------------------------------------
   // MARK: Aliases
 
+  let envFileKeyValues: Promise<Record<string, string>> = Promise.resolve({});
+
   const aliases = function parseAliases(): Record<string, string | null> {
     try {
       return JSON.parse(context.workspaceState.get(aliasesStateKey) ?? "{}");
@@ -156,6 +158,7 @@ export async function activate(
       // `envFile` fails to parse (it does not support whitespace in env variable values).
       //
       // Instead, we use `--script_path` and transform it to an environment file here.
+      // We then populate the  environment variables described in `envFile`.
       const success = await executeBazelTask(
         "run",
         target,
@@ -169,15 +172,22 @@ export async function activate(
           await vscode.workspace.fs.readFile(scriptPathUri),
         );
         const workingDirectory = script.match(/^cd (.+?) &&/m)![1];
-        const env: string[] = [`PWD=${workingDirectory}`];
 
-        for (const [, kv] of script.matchAll(/^\s+(\w+=.+) \\$/gm)) {
-          env.push(kv);
+        const env: Record<string, string> = { PWD: workingDirectory };
+        for (const [, key, value] of script.matchAll(/^\s+(\w+)=(.+) \\$/gm)) {
+          env[key] = value;
         }
+        // Add all the entries from `envFile`.
+        Object.assign(env, await envFileKeyValues);
+
+        // Convert to plain text environment file.
+        const envString = Object.entries(env).map(([key, value]) =>
+          `${key}=${value}`
+        ).join("\n");
 
         await vscode.workspace.fs.writeFile(
           scriptPathUri,
-          new TextEncoder().encode(env.join("\n")),
+          new TextEncoder().encode(envString),
         );
 
         for (const resolve of batch.resolveEnvFile) {
@@ -374,6 +384,61 @@ export async function activate(
     return aliases;
   };
 
+  /** Returns the path to the environment file, defined in the extension settings. */
+  const configEnvFile = () => {
+    const envFile = vscode.workspace.getConfiguration(extensionId).get<
+      string | null
+    >("envFile");
+    return envFile !== undefined ? envFile : null;
+  };
+
+  /**
+   * Read an environment file and parses it to an object.
+   * Ignores comment lines, starting with "#".
+   * Only one environment variable can be declared for each line.
+   */
+  const readEnvFile = async (envFile: string) => {
+    const path = vscode.Uri.joinPath(
+      // We assume that we a workspace folder because vscode-bazel extension also requires using a workspace folder.
+      vscode.workspace.workspaceFolders![0].uri,
+      envFile,
+    );
+    const envBytes = await vscode.workspace.fs.readFile(
+      path,
+    ).then(undefined, () => {
+      vscode.window.showErrorMessage(`Cannot read file ${path}`);
+      return new Uint8Array();
+    });
+
+    const envString = new TextDecoder().decode(envBytes);
+    const envContent: Record<string, string> = {};
+
+    const lines = envString.split("\n").filter((line) =>
+      !line.startsWith("#") && line.trim().length > 0
+    );
+    for (const line of lines) {
+      const keyValue = line.indexOf("=");
+      if (keyValue === -1) {
+        envContent[line] = "";
+      } else {
+        const key = line.slice(0, keyValue);
+        const value = line.slice(keyValue + 1);
+        envContent[key] = value;
+      }
+    }
+    return envContent;
+  };
+
+  const loadEnvFile = (envFile: string | null) => {
+    if (envFile !== null) {
+      envFileKeyValues = readEnvFile(envFile);
+    } else {
+      envFileKeyValues = Promise.resolve({});
+    }
+  };
+
+  let envFileWatcher: vscode.FileSystemWatcher | undefined;
+
   const updateConfiguration = () => {
     const config = configAliases();
     const unseen = new Set(Object.keys(config));
@@ -389,6 +454,22 @@ export async function activate(
       setAlias(alias, undefined);
       unregisterCommands(alias);
     }
+
+    // Load env file and set up a watcher on it.
+    const envFile = configEnvFile();
+    envFileWatcher?.dispose();
+    if (envFile !== null) {
+      envFileWatcher = vscode.workspace.createFileSystemWatcher(envFile);
+      envFileWatcher.onDidCreate(() => loadEnvFile(envFile));
+      envFileWatcher.onDidChange(() => loadEnvFile(envFile));
+      envFileWatcher.onDidDelete(() => {
+        envFileKeyValues = Promise.resolve({});
+      });
+    } else {
+      // Avoid calling `dispose()` twice.
+      envFileWatcher = undefined;
+    }
+    loadEnvFile(envFile);
   };
 
   // Watch configuration.
@@ -397,6 +478,9 @@ export async function activate(
       if (event.affectsConfiguration(extensionId)) updateConfiguration();
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => updateConfiguration()),
+    {
+      dispose: () => envFileWatcher?.dispose(),
+    },
   );
 
   // Apply initial configuration.
@@ -406,6 +490,11 @@ export async function activate(
     setAlias(alias, aliases[alias] ?? target);
     registerCommands(alias);
   }
+
+  // Load the env file once.
+  loadEnvFile(
+    configEnvFile(),
+  );
 
   // -----------------------------------------------------------------------------------------------
   // MARK: Startup
