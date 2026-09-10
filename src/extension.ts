@@ -465,6 +465,9 @@ export async function activate(
       envFileWatcher.onDidDelete(() => {
         envFileKeyValues = Promise.resolve({});
       });
+    } else {
+      // Avoid calling `dispose()` twice.
+      envFileWatcher = undefined;
     }
     loadEnvFile(envFile);
   };

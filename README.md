@@ -28,16 +28,18 @@ commands `bazel-aliases.{main,test}.{output,...}` will be available.
 
 ### Environment file
 
-The extension will look for an `.env` file at the root of the workspace, and
-automatically include its entries in generated `.envFile` files.
+The extension can be configured to load an environmemt file and automatically
+include its entries in generated `.envFile` files.
 
-The `.env` file location can be changed in `settings.json` like so:
+The `.env` file location can be set in `settings.json` like so:
 
 ```json
 {
   "bazel-aliases.envFile": "/path/to/env/file"
 }
 ```
+
+By default, no environment file will be used.
 
 ## Commands
 
