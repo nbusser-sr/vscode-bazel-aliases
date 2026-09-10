@@ -1,9 +1,7 @@
 {
-  "bazel-aliases": {
-    "aliases": {
-      "main": "//:main",
-      "test": "//:test",
-    },
-    "envFile": ".env"
-  }
+  "bazel-aliases.aliases": {
+    "main": "//:main",
+    "test": "//:test",
+  },
+  "bazel-aliases.envFile": ".env"
 }
