@@ -96,6 +96,8 @@ export async function activate(
                 queryString(alias)
               }) — [Copy label](command:${extensionId}.copy?${
                 queryString(alias)
+              }) — [Run label](command:${extensionId}.run?${
+                queryString(alias)
               })`
               : ""
           } |\n`,
@@ -167,6 +169,7 @@ export async function activate(
 
       if (!success) {
         for (const resolve of batch.resolveEnvFile) resolve(undefined);
+        for (const resolve of batch.resolveWorkingDir) resolve(undefined);
       } else {
         const script = new TextDecoder().decode(
           await vscode.workspace.fs.readFile(scriptPathUri),
@@ -254,6 +257,38 @@ export async function activate(
         batch.resolveBuild.push(() => {});
         batch.resolveOutput.push(resolve);
       });
+    },
+    async run({ target }) {
+      const batch = scheduleBuild(target);
+
+      const [envFilePath, workingDirectory, output] = await Promise.all([
+        new Promise<string | undefined>((resolve) =>
+          batch.resolveEnvFile.push(resolve)
+        ),
+        new Promise<string | undefined>((resolve) =>
+          batch.resolveWorkingDir.push(resolve)
+        ),
+        new Promise<string | undefined>((resolve) =>
+          batch.resolveOutput.push(resolve)
+        ),
+      ]);
+
+      // The target does not have a single output.
+      if (output === undefined) {
+        return undefined
+      }
+
+      const env = envFilePath !== undefined
+        ? await readEnvFileAtUri(vscode.Uri.file(envFilePath))
+        : undefined;
+
+      const terminal = vscode.window.createTerminal({
+        name: target,
+        cwd: workingDirectory,
+        env,
+      });
+      terminal.show();
+      terminal.sendText(output);
     },
     async outputPath({ target }) {
       return await new Promise<string | undefined>((resolve) =>
@@ -393,24 +428,11 @@ export async function activate(
   };
 
   /**
-   * Read an environment file and parses it to an object.
+   * Parses the content of an environment file into an object.
    * Ignores comment lines, starting with "#".
    * Only one environment variable can be declared for each line.
    */
-  const readEnvFile = async (envFile: string) => {
-    const path = vscode.Uri.joinPath(
-      // We assume that we a workspace folder because vscode-bazel extension also requires using a workspace folder.
-      vscode.workspace.workspaceFolders![0].uri,
-      envFile,
-    );
-    const envBytes = await vscode.workspace.fs.readFile(
-      path,
-    ).then(undefined, () => {
-      vscode.window.showErrorMessage(`Cannot read file ${path}`);
-      return new Uint8Array();
-    });
-
-    const envString = new TextDecoder().decode(envBytes);
+  const parseEnvFileContent = (envString: string): Record<string, string> => {
     const envContent: Record<string, string> = {};
 
     const lines = envString.split("\n").filter((line) =>
@@ -427,6 +449,31 @@ export async function activate(
       }
     }
     return envContent;
+  };
+
+  /** Reads and parses an environment file located at an arbitrary URI. */
+  const readEnvFileAtUri = async (uri: vscode.Uri) => {
+    const envBytes = await vscode.workspace.fs.readFile(uri).then(
+      undefined,
+      () => {
+        vscode.window.showErrorMessage(`Cannot read file ${uri}`);
+        return new Uint8Array();
+      },
+    );
+    return parseEnvFileContent(new TextDecoder().decode(envBytes));
+  };
+
+  /**
+   * Reads and parses the environment file configured via `bazel-aliases.envFile`, relative to the
+   * workspace folder.
+   */
+  const readEnvFile = async (envFile: string) => {
+    const path = vscode.Uri.joinPath(
+      // We assume that we a workspace folder because vscode-bazel extension also requires using a workspace folder.
+      vscode.workspace.workspaceFolders![0].uri,
+      envFile,
+    );
+    return await readEnvFileAtUri(path);
   };
 
   const loadEnvFile = (envFile: string | null) => {

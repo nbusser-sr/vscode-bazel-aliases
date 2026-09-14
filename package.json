@@ -57,6 +57,12 @@
         "title": "Copy Active Target Label",
         "category": "Bazel",
         "enablement": "bazel.haveWorkspace && bazel-aliases.active"
+      },
+      {
+        "command": "bazel-aliases.run",
+        "title": "Run Active Target Label",
+        "category": "Bazel",
+        "enablement": "bazel.haveWorkspace && bazel-aliases.active"
       }
     ],
     "configuration": {
