@@ -90,8 +90,8 @@ export async function activate(
           `| \`${alias}\` | [${target ? `\`${target}\`` : "Click to set"
           }](command:${extensionId}.update?${queryString(alias)}) | ${target
             ? `[Build](command:${extensionId}.build?${queryString(alias)
+            }) — [Run](command:${extensionId}.run?${queryString(alias)
             }) — [Copy label](command:${extensionId}.copy?${queryString(alias)
-            }) — [Run label](command:${extensionId}.run?${queryString(alias)
             })`
             : ""
           } |\n`,
