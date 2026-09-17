@@ -76,8 +76,7 @@ export async function activate(
 
       for (const [alias] of targetKvs) {
         statusBarItem.tooltip.appendMarkdown(
-          `| \`${alias}\` | [Click to set](command:${extensionId}.update?${
-            queryString(alias)
+          `| \`${alias}\` | [Click to set](command:${extensionId}.update?${queryString(alias)
           }) |\n`,
         );
       }
@@ -88,18 +87,13 @@ export async function activate(
 
       for (const [alias, target] of targetKvs) {
         statusBarItem.tooltip.appendMarkdown(
-          `| \`${alias}\` | [${
-            target ? `\`${target}\`` : "Click to set"
-          }](command:${extensionId}.update?${queryString(alias)}) | ${
-            target
-              ? `[Build](command:${extensionId}.build?${
-                queryString(alias)
-              }) — [Copy label](command:${extensionId}.copy?${
-                queryString(alias)
-              }) — [Run label](command:${extensionId}.run?${
-                queryString(alias)
-              })`
-              : ""
+          `| \`${alias}\` | [${target ? `\`${target}\`` : "Click to set"
+          }](command:${extensionId}.update?${queryString(alias)}) | ${target
+            ? `[Build](command:${extensionId}.build?${queryString(alias)
+            }) — [Copy label](command:${extensionId}.copy?${queryString(alias)
+            }) — [Run label](command:${extensionId}.run?${queryString(alias)
+            })`
+            : ""
           } |\n`,
         );
       }
@@ -254,7 +248,7 @@ export async function activate(
     async output({ target }) {
       return await new Promise<string | undefined>((resolve) => {
         const batch = scheduleBuild(target);
-        batch.resolveBuild.push(() => {});
+        batch.resolveBuild.push(() => { });
         batch.resolveOutput.push(resolve);
       });
     },
@@ -275,20 +269,28 @@ export async function activate(
 
       // The target does not have a single output.
       if (output === undefined) {
-        return undefined
+        return undefined;
       }
 
       const env = envFilePath !== undefined
         ? await readEnvFileAtUri(vscode.Uri.file(envFilePath))
         : undefined;
 
-      const terminal = vscode.window.createTerminal({
-        name: target,
-        cwd: workingDirectory,
-        env,
-      });
-      terminal.show();
-      terminal.sendText(output);
+      await executeTask(
+        { type: "bazel-aliases-run", target },
+        vscode.TaskScope.Workspace,
+        target,
+        new vscode.ProcessExecution(output, [], { cwd: workingDirectory, env }),
+        {
+          clear: false,
+          close: false,
+          echo: true,
+          focus: true,
+          panel: vscode.TaskPanelKind.Dedicated,
+          reveal: vscode.TaskRevealKind.Always,
+          showReuseMessage: false,
+        },
+      );
     },
     async outputPath({ target }) {
       return await new Promise<string | undefined>((resolve) =>
@@ -347,7 +349,7 @@ export async function activate(
         ) {
           resolvedArgs.target =
             (commandName === "update" ? undefined : aliases[alias]) ??
-              await promptAlias(alias);
+            await promptAlias(alias);
         } else if (commandName === "update") {
           // If a target was given for `update`, set it.
           setAlias(alias, resolvedArgs.target);
@@ -568,7 +570,7 @@ async function cleanupStorage(context: vscode.ExtensionContext): Promise<void> {
     await vscode.workspace.fs.delete(context.storageUri, {
       recursive: true,
       useTrash: false,
-    }).then(undefined, () => {});
+    }).then(undefined, () => { });
   }
 }
 
@@ -603,6 +605,26 @@ async function executeBazelCommand(
   }
 }
 
+/** Creates a `vscode.Task` and starts it. */
+async function executeTask(
+  definition: vscode.TaskDefinition,
+  scope: vscode.WorkspaceFolder | vscode.TaskScope,
+  name: string,
+  execution: vscode.ProcessExecution,
+  presentationOptions: vscode.TaskPresentationOptions,
+): Promise<vscode.TaskExecution> {
+  const task = new vscode.Task(
+    definition,
+    scope,
+    name,
+    "bazel-aliases",
+    execution,
+  );
+  task.presentationOptions = presentationOptions;
+
+  return await vscode.tasks.executeTask(task);
+}
+
 /**
  * Executes `bazel <build|run> <target> [extraArgs...]` and returns whether the command succeeded.
  *
@@ -626,8 +648,11 @@ async function executeBazelTask(
     ? vscode.workspace.workspaceFolders[0]
     : vscode.workspace.getWorkspaceFolder(vscode.Uri.file(bazelWorkspace));
 
-  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L277-L287
-  const task = new vscode.Task(
+  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L229-L289
+  const bazelConfiguration = vscode.workspace.getConfiguration("bazel");
+
+  const taskExecution = await executeTask(
+    // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L277-L287
     {
       type: "bazel",
       command: "build",
@@ -635,38 +660,30 @@ async function executeBazelTask(
     },
     workspaceFolder ?? vscode.TaskScope.Workspace,
     `${command} ${target}`,
-    "bazel-aliases",
+    new vscode.ProcessExecution(
+      // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L268-L274
+      bazelConfiguration.get<string>("executable", "bazel"),
+      [
+        ...bazelConfiguration.get<string[]>("commandLine.startupOptions", []),
+        command,
+        ...bazelConfiguration.get<string[]>("commandLine.commandArgs", []),
+        target,
+        ...extraArgs,
+      ],
+      { cwd: bazelWorkspace },
+    ),
+    {
+      clear: false,
+      close: true,
+      echo: true,
+      focus: false,
+      panel: vscode.TaskPanelKind.Shared,
+      reveal: vscode.TaskRevealKind.Silent,
+      showReuseMessage: false,
+    },
   );
-
-  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L229-L289
-  const bazelConfiguration = vscode.workspace.getConfiguration("bazel");
-
-  task.execution = new vscode.ProcessExecution(
-    // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L268-L274
-    bazelConfiguration.get<string>("executable", "bazel"),
-    [
-      ...bazelConfiguration.get<string[]>("commandLine.startupOptions", []),
-      command,
-      ...bazelConfiguration.get<string[]>("commandLine.commandArgs", []),
-      target,
-      ...extraArgs,
-    ],
-    { cwd: bazelWorkspace },
-  );
-
-  task.presentationOptions = {
-    clear: false,
-    close: true,
-    echo: true,
-    focus: false,
-    panel: vscode.TaskPanelKind.Shared,
-    reveal: vscode.TaskRevealKind.Silent,
-    showReuseMessage: false,
-  };
 
   // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/extension/command_variables.ts#L217-L223
-  const taskExecution = await vscode.tasks.executeTask(task);
-
   return await new Promise<boolean>((resolve) => {
     const subscription = vscode.tasks.onDidEndTaskProcess((e) => {
       if (e.execution !== taskExecution) return;
