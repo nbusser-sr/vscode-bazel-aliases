@@ -164,7 +164,7 @@ export async function activate(
       const success = await executeBazelTask(
         "run",
         target,
-        `--script_path=${scriptPathUri.fsPath}`,
+        { extraArgs: [`--script_path=${scriptPathUri.fsPath}`] },
       );
 
       if (!success) {
@@ -259,46 +259,16 @@ export async function activate(
       });
     },
     async run({ target }) {
-      const batch = scheduleBuild(target);
-
-      const [env, workingDirectory, output] = await Promise.all([
-        new Promise<Record<string, string> | undefined>((resolve) =>
-          batch.resolveEnvFile.push((envFilePath) => {
-            if (envFilePath === undefined) {
-              resolve(undefined);
-            } else {
-              readEnvFileAtUri(vscode.Uri.file(envFilePath)).then(resolve);
-            }
-          })
-        ),
-        new Promise<string | undefined>((resolve) =>
-          batch.resolveWorkingDir.push(resolve)
-        ),
-        new Promise<string | undefined>((resolve) =>
-          batch.resolveOutput.push(resolve)
-        ),
-      ]);
-
-      // The target does not have a single output.
-      if (output === undefined) {
-        return undefined;
+      const env = await envFileKeyValues;
+      const success = await executeBazelTask("run", target, {
+        autoClose: false,
+        env,
+      });
+      if (!success) {
+        vscode.window.showErrorMessage(
+          `"bazel run" failed for target ${target}.`,
+        );
       }
-
-      await executeTask(
-        { type: "bazel-aliases-run", target },
-        vscode.TaskScope.Workspace,
-        target,
-        new vscode.ProcessExecution(output, [], { cwd: workingDirectory, env }),
-        {
-          clear: false,
-          close: false,
-          echo: true,
-          focus: true,
-          panel: vscode.TaskPanelKind.Dedicated,
-          reveal: vscode.TaskRevealKind.Always,
-          showReuseMessage: false,
-        },
-      );
     },
     async outputPath({ target }) {
       return await new Promise<string | undefined>((resolve) =>
@@ -613,24 +583,10 @@ async function executeBazelCommand(
   }
 }
 
-/** Creates a `vscode.Task` and starts it. */
-async function executeTask(
-  definition: vscode.TaskDefinition,
-  scope: vscode.WorkspaceFolder | vscode.TaskScope,
-  name: string,
-  execution: vscode.ProcessExecution,
-  presentationOptions: vscode.TaskPresentationOptions,
-): Promise<vscode.TaskExecution> {
-  const task = new vscode.Task(
-    definition,
-    scope,
-    name,
-    "bazel-aliases",
-    execution,
-  );
-  task.presentationOptions = presentationOptions;
-
-  return await vscode.tasks.executeTask(task);
+interface ExecuteBazelTaskOptions {
+  env?: Record<string, string>;
+  autoClose?: boolean;
+  extraArgs?: string[];
 }
 
 /**
@@ -641,7 +597,7 @@ async function executeTask(
 async function executeBazelTask(
   command: "build" | "run",
   target: string,
-  ...extraArgs: string[]
+  { env, autoClose = true, extraArgs = [] }: ExecuteBazelTaskOptions = {},
 ): Promise<boolean> {
   // Unfortunately `bazel.buildTarget` does not accept a target (it accepts a function, which we
   // cannot pass through `executeCommand()` [^1]), so we have to execute the task directly.
@@ -656,11 +612,8 @@ async function executeBazelTask(
     ? vscode.workspace.workspaceFolders[0]
     : vscode.workspace.getWorkspaceFolder(vscode.Uri.file(bazelWorkspace));
 
-  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L229-L289
-  const bazelConfiguration = vscode.workspace.getConfiguration("bazel");
-
-  const taskExecution = await executeTask(
-    // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L277-L287
+  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L277-L287
+  const task = new vscode.Task(
     {
       type: "bazel",
       command: "build",
@@ -668,30 +621,38 @@ async function executeBazelTask(
     },
     workspaceFolder ?? vscode.TaskScope.Workspace,
     `${command} ${target}`,
-    new vscode.ProcessExecution(
-      // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L268-L274
-      bazelConfiguration.get<string>("executable", "bazel"),
-      [
-        ...bazelConfiguration.get<string[]>("commandLine.startupOptions", []),
-        command,
-        ...bazelConfiguration.get<string[]>("commandLine.commandArgs", []),
-        target,
-        ...extraArgs,
-      ],
-      { cwd: bazelWorkspace },
-    ),
-    {
-      clear: false,
-      close: true,
-      echo: true,
-      focus: false,
-      panel: vscode.TaskPanelKind.Shared,
-      reveal: vscode.TaskRevealKind.Silent,
-      showReuseMessage: false,
-    },
+    "bazel-aliases",
   );
 
+  // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L229-L289
+  const bazelConfiguration = vscode.workspace.getConfiguration("bazel");
+
+  task.execution = new vscode.ProcessExecution(
+    // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/bazel/tasks.ts#L268-L274
+    bazelConfiguration.get<string>("executable", "bazel"),
+    [
+      ...bazelConfiguration.get<string[]>("commandLine.startupOptions", []),
+      command,
+      ...bazelConfiguration.get<string[]>("commandLine.commandArgs", []),
+      target,
+      ...extraArgs,
+    ],
+    { cwd: bazelWorkspace, env },
+  );
+
+  task.presentationOptions = {
+    clear: false,
+    close: autoClose,
+    echo: true,
+    focus: false,
+    panel: vscode.TaskPanelKind.Shared,
+    reveal: vscode.TaskRevealKind.Silent,
+    showReuseMessage: false,
+  };
+
   // https://github.com/bazel-contrib/vscode-bazel/blob/6518f01fd1d401d0af9be2d355b3d1e68ba4efac/src/extension/command_variables.ts#L217-L223
+  const taskExecution = await vscode.tasks.executeTask(task);
+
   return await new Promise<boolean>((resolve) => {
     const subscription = vscode.tasks.onDidEndTaskProcess((e) => {
       if (e.execution !== taskExecution) return;
