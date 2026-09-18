@@ -76,7 +76,8 @@ export async function activate(
 
       for (const [alias] of targetKvs) {
         statusBarItem.tooltip.appendMarkdown(
-          `| \`${alias}\` | [Click to set](command:${extensionId}.update?${queryString(alias)
+          `| \`${alias}\` | [Click to set](command:${extensionId}.update?${
+            queryString(alias)
           }) |\n`,
         );
       }
@@ -87,13 +88,18 @@ export async function activate(
 
       for (const [alias, target] of targetKvs) {
         statusBarItem.tooltip.appendMarkdown(
-          `| \`${alias}\` | [${target ? `\`${target}\`` : "Click to set"
-          }](command:${extensionId}.update?${queryString(alias)}) | ${target
-            ? `[Build](command:${extensionId}.build?${queryString(alias)
-            }) — [Run](command:${extensionId}.run?${queryString(alias)
-            }) — [Copy label](command:${extensionId}.copy?${queryString(alias)
-            })`
-            : ""
+          `| \`${alias}\` | [${
+            target ? `\`${target}\`` : "Click to set"
+          }](command:${extensionId}.update?${queryString(alias)}) | ${
+            target
+              ? `[Build](command:${extensionId}.build?${
+                queryString(alias)
+              }) — [Run](command:${extensionId}.run?${
+                queryString(alias)
+              }) — [Copy label](command:${extensionId}.copy?${
+                queryString(alias)
+              })`
+              : ""
           } |\n`,
         );
       }
@@ -248,16 +254,22 @@ export async function activate(
     async output({ target }) {
       return await new Promise<string | undefined>((resolve) => {
         const batch = scheduleBuild(target);
-        batch.resolveBuild.push(() => { });
+        batch.resolveBuild.push(() => {});
         batch.resolveOutput.push(resolve);
       });
     },
     async run({ target }) {
       const batch = scheduleBuild(target);
 
-      const [envFilePath, workingDirectory, output] = await Promise.all([
-        new Promise<string | undefined>((resolve) =>
-          batch.resolveEnvFile.push(resolve)
+      const [env, workingDirectory, output] = await Promise.all([
+        new Promise<Record<string, string> | undefined>((resolve) =>
+          batch.resolveEnvFile.push((envFilePath) => {
+            if (envFilePath === undefined) {
+              resolve(undefined);
+            } else {
+              readEnvFileAtUri(vscode.Uri.file(envFilePath)).then(resolve);
+            }
+          })
         ),
         new Promise<string | undefined>((resolve) =>
           batch.resolveWorkingDir.push(resolve)
@@ -271,10 +283,6 @@ export async function activate(
       if (output === undefined) {
         return undefined;
       }
-
-      const env = envFilePath !== undefined
-        ? await readEnvFileAtUri(vscode.Uri.file(envFilePath))
-        : undefined;
 
       await executeTask(
         { type: "bazel-aliases-run", target },
@@ -349,7 +357,7 @@ export async function activate(
         ) {
           resolvedArgs.target =
             (commandName === "update" ? undefined : aliases[alias]) ??
-            await promptAlias(alias);
+              await promptAlias(alias);
         } else if (commandName === "update") {
           // If a target was given for `update`, set it.
           setAlias(alias, resolvedArgs.target);
@@ -570,7 +578,7 @@ async function cleanupStorage(context: vscode.ExtensionContext): Promise<void> {
     await vscode.workspace.fs.delete(context.storageUri, {
       recursive: true,
       useTrash: false,
-    }).then(undefined, () => { });
+    }).then(undefined, () => {});
   }
 }
 
